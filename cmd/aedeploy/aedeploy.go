@@ -14,6 +14,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go/build"
@@ -34,6 +36,7 @@ var (
 	}
 
 	gopathCache = map[string]string{}
+	gorootCache = map[string]string{}
 )
 
 func usage() {
@@ -64,12 +67,23 @@ func aedeploy() error {
 
 	tmpDir, err := app.bundle()
 	if tmpDir != "" {
-		defer os.RemoveAll(tmpDir)
+		//defer os.RemoveAll(tmpDir)
 	}
 	if err != nil {
 		return err
 	}
 
+	imports, _ := json.Marshal(&app.imports)
+	appFiles, _ := json.Marshal(&app.appFiles)
+	var (
+		importsBuffer  bytes.Buffer
+		appFilesBuffer bytes.Buffer
+	)
+	json.Indent(&importsBuffer, imports, "", "  ")
+	json.Indent(&appFilesBuffer, appFiles, "", "  ")
+	fmt.Fprintf(os.Stdout, "temp dir %s\n\n", tmpDir)
+	fmt.Fprintf(os.Stdout, "appFiles %s\n\n", string(appFilesBuffer.Bytes()))
+	fmt.Fprintf(os.Stdout, "imports %s\n\n", string(importsBuffer.Bytes()))
 	if err := os.Chdir(tmpDir); err != nil {
 		return fmt.Errorf("unable to chdir to %v: %v", tmpDir, err)
 	}
@@ -149,7 +163,11 @@ func imports(ctxt *build.Context, srcDir string, gopath []string) (map[string]st
 	// Resolve all non-standard-library imports
 	result := make(map[string]string)
 	for _, v := range pkg.Imports {
-		if !strings.Contains(v, ".") {
+
+		// if !strings.Contains(v, ".") {
+		// 	continue
+		// }
+		if str, _ := findInGoroot(v, ctxt.GOROOT); len(str) != 0 {
 			continue
 		}
 		src, err := findInGopath(v, gopath)
@@ -169,6 +187,21 @@ func imports(ctxt *build.Context, srcDir string, gopath []string) (map[string]st
 		}
 	}
 	return result, nil
+}
+
+//findInGoroot searches the goroot for the named import directory.
+func findInGoroot(dir string, goroot string) (string, error) {
+	if v, ok := gorootCache[dir]; ok {
+		return v, nil
+	}
+
+	dst := filepath.Join(goroot, "src", dir)
+	if _, err := os.Stat(dst); err == nil {
+		gorootCache[dir] = dst
+		return dst, nil
+	}
+
+	return "", fmt.Errorf("unable to find package %v in goroot %v", dir, goroot)
 }
 
 // findInGopath searches the gopath for the named import directory.

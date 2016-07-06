@@ -67,7 +67,7 @@ func aedeploy() error {
 
 	tmpDir, err := app.bundle()
 	if tmpDir != "" {
-		//defer os.RemoveAll(tmpDir)
+		defer os.RemoveAll(tmpDir)
 	}
 	if err != nil {
 		return err
@@ -164,9 +164,6 @@ func imports(ctxt *build.Context, srcDir string, gopath []string) (map[string]st
 	result := make(map[string]string)
 	for _, v := range pkg.Imports {
 
-		// if !strings.Contains(v, ".") {
-		// 	continue
-		// }
 		if str, _ := findInGoroot(v, ctxt.GOROOT); len(str) != 0 {
 			continue
 		}
